@@ -11,7 +11,22 @@ python vap_offline_onnx.py \
 
 ```bash
 pip install -U \
+onnx==1.16.1 \
+nvidia-pyindex \
+onnx-graphsurgeon \
+onnxruntime==1.18.1 \
+onnxsim==0.4.33 \
+simple_onnx_processing_tools \
+sne4onnx>=1.0.13 \
+sng4onnx>=1.0.4 \
+tensorflow==2.17.0 \
+protobuf==3.20.3 \
 onnx2tf \
+h5py==3.11.0 \
+psutil==5.9.5 \
+ml_dtypes==0.3.2 \
+tf-keras~=2.16 \
+flatbuffers>=23.5.26 \
 spo4onnx
 
 pip install -U --no-deps \
