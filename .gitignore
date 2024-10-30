@@ -10,3 +10,7 @@ all.bat
 *.bat
 /train/__pycache__
 /train/lightning_logs
+
+*.onnx
+saved_model/
+tfjs_model/
