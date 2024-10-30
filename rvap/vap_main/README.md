@@ -54,3 +54,5 @@ saved_model \
 tfjs_model
 ```
 ![image](https://github.com/user-attachments/assets/4a009bde-3464-4dd6-a5de-8da3099d6f71)
+
+![image](https://github.com/user-attachments/assets/d8c180c4-cc8e-42d9-b300-bfa84ee34155)
