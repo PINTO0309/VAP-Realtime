@@ -85,7 +85,7 @@ class VapConfig:
         )
 
 class VapGPT(nn.Module):
-    
+
     def __init__(self, conf: Optional[VapConfig] = None):
         super().__init__()
         if conf is None:
@@ -95,11 +95,11 @@ class VapGPT(nn.Module):
         self.frame_hz = conf.frame_hz
 
         self.temp_elapse_time = []
-        
+
         # elif self.conf.encoder_type == "wav2vec2":
         #     from vap.customwav2vec2 import W2V2Transformers
         #     self.encoder = W2V2Transformers(model_type=self.conf.wav2vec_type)
-        
+
         # elif self.conf.encoder_type == "hubert":
         #     from vap.customhubert import HubertEncoder
         #     self.encoder = HubertEncoder(model_type= self.conf.hubert_model)
@@ -129,20 +129,20 @@ class VapGPT(nn.Module):
         # Outputs
         # Voice activity objective -> x1, x2 -> logits ->  BCE
         self.va_classifier = nn.Linear(conf.dim, 1)
-        
+
         if self.conf.lid_classify == 1:
             self.lid_classifier = nn.Linear(conf.dim, conf.lid_classify_num_class)
-        
+
         elif self.conf.lid_classify == 2:
             self.lid_classifier_middle = nn.Linear(conf.dim*2, conf.lid_classify_num_class)
-        
+
         if self.conf.lang_cond == 1:
             self.lang_condition = nn.Linear(conf.lid_classify_num_class, conf.dim)
-        
+
         self.vap_head = nn.Linear(conf.dim, self.objective.n_classes)
 
     def load_encoder(self, cpc_model):
-        
+
         # Audio Encoder
         #if self.conf.encoder_type == "cpc":
         self.encoder1 = EncoderCPC(
@@ -153,7 +153,7 @@ class VapGPT(nn.Module):
         self.encoder1 = self.encoder1.eval()
         #print(self.encoder1)
         #self.encoder1 = self.encoder1.half()
-        
+
         self.encoder2 = EncoderCPC(
             load_pretrained=True if self.conf.load_pretrained == 1 else False,
             freeze=self.conf.freeze_encoder,
@@ -162,7 +162,7 @@ class VapGPT(nn.Module):
 
         self.encoder2 = self.encoder2.eval()
         #self.encoder2 = self.encoder2.half()
-        
+
         if self.conf.freeze_encoder == 1:
             print('freeze encoder')
             self.encoder1.freeze()
@@ -173,24 +173,24 @@ class VapGPT(nn.Module):
         return self.objective.horizon_time
 
     def encode_audio(self, audio1: torch.Tensor, audio2: torch.Tensor) -> Tuple[Tensor, Tensor]:
-        
+
         x1 = self.encoder1(audio1)  # speaker 1
         x2 = self.encoder2(audio2)  # speaker 2
-        
+
         return x1, x2
 
     def vad_loss(self, vad_output, vad):
         return F.binary_cross_entropy_with_logits(vad_output, vad)
 
 class VAPRealTime():
-    
+
     BINS_P_NOW = [0, 1]
     BINS_PFUTURE = [2, 3]
-    
+
     CALC_PROCESS_TIME_INTERVAL = 100
-        
+
     def __init__(self, vap_model, cpc_model, device, frame_rate, context_len_sec):
-        
+
         conf = VapConfig()
         self.vap = VapGPT(conf)
 
@@ -199,13 +199,13 @@ class VAPRealTime():
         sd = torch.load(vap_model, map_location=torch.device('cpu'))
         self.vap.load_encoder(cpc_model=cpc_model)
         self.vap.load_state_dict(sd, strict=False)
-        
+
         # The downsampling parameters are not loaded by "load_state_dict"
         self.vap.encoder1.downsample[1].weight = nn.Parameter(sd['encoder.downsample.1.weight'])
         self.vap.encoder1.downsample[1].bias = nn.Parameter(sd['encoder.downsample.1.bias'])
         self.vap.encoder1.downsample[2].ln.weight = nn.Parameter(sd['encoder.downsample.2.ln.weight'])
         self.vap.encoder1.downsample[2].ln.bias = nn.Parameter(sd['encoder.downsample.2.ln.bias'])
-        
+
         self.vap.encoder2.downsample[1].weight = nn.Parameter(sd['encoder.downsample.1.weight'])
         self.vap.encoder2.downsample[1].bias = nn.Parameter(sd['encoder.downsample.1.bias'])
         self.vap.encoder2.downsample[2].ln.weight = nn.Parameter(sd['encoder.downsample.2.ln.weight'])
@@ -216,22 +216,22 @@ class VAPRealTime():
 
         self.audio_contenxt_lim_sec = context_len_sec
         self.frame_rate = frame_rate
-        
+
         # Context length of the audio embeddings (depends on frame rate)
         self.audio_context_len = int(self.audio_contenxt_lim_sec * self.frame_rate)
-        
+
         self.sampling_rate = 16000
         self.frame_contxt_padding = 320 # Independe from frame size
-        
+
         # Frame size
         # 10Hz -> 320 + 1600 samples
         # 20Hz -> 320 + 800 samples
         # 50Hz -> 320 + 320 samples
         self.audio_frame_size = self.sampling_rate // self.frame_rate + self.frame_contxt_padding
-        
+
         self.current_x1_audio = []
         self.current_x2_audio = []
-        
+
         self.result_p_now = 0.
         self.result_p_future = 0.
         self.result_last_time = -1
@@ -240,22 +240,22 @@ class VAPRealTime():
 
         self.e1_context = []
         self.e2_context = []
-        
+
         self.list_process_time_context = []
         self.last_interval_time = time.time()
-    
+
     def process_vap(self, x1: list | np.ndarray, x2: list | np.ndarray):
-        
+
         # Frame size
         # 20Hz -> 320 + 800 samples
         # 50Hz -> 320 + 320 samples
-        
+
         time_start = time.time()
-        
+
         # Save the current audio data
         self.current_x1_audio = x1[self.frame_contxt_padding:]
         self.current_x2_audio = x2[self.frame_contxt_padding:]
-        
+
         with torch.no_grad():
             if isinstance(x1, list):
                 x1_ = torch.tensor([[x1]], dtype=torch.float32, device=self.device)
@@ -264,67 +264,184 @@ class VAPRealTime():
                 x1_ = torch.from_numpy(x1).to(self.device).unsqueeze(0).unsqueeze(0)
                 x2_ = torch.from_numpy(x2).to(self.device).unsqueeze(0).unsqueeze(0)
 
+            # x1_.shape
+            #   torch.Size([1, 1, 1120])
+            # x2_.shape
+            #   torch.Size([1, 1, 1120])
             e1, e2 = self.vap.encode_audio(x1_, x2_)
-            
+
             self.e1_context.append(e1)
             self.e2_context.append(e2)
-            
+
             if len(self.e1_context) > self.audio_context_len:
                 self.e1_context = self.e1_context[-self.audio_context_len:]
             if len(self.e2_context) > self.audio_context_len:
                 self.e2_context = self.e2_context[-self.audio_context_len:]
-            
+
             x1_ = torch.cat(self.e1_context, dim=1).to(self.device)
             x2_ = torch.cat(self.e2_context, dim=1).to(self.device)
-            
+
             o1 = self.vap.ar_channel(x1_, attention=False)
             o2 = self.vap.ar_channel(x2_, attention=False)
             out = self.vap.ar(o1["x"], o2["x"], attention=False)
-            
+
             # Outputs
             logits = self.vap.vap_head(out["x"])
             probs = logits.softmax(dim=-1)
-            
+
             p_now = self.vap.objective.probs_next_speaker_aggregate(
                 probs,
                 from_bin=self.BINS_P_NOW[0],
                 to_bin=self.BINS_P_NOW[-1]
             )
-            
+
             p_future = self.vap.objective.probs_next_speaker_aggregate(
                 probs,
                 from_bin=self.BINS_PFUTURE[0],
                 to_bin=self.BINS_PFUTURE[1]
             )
-            
+
             # Get back to the CPU
             p_now = p_now.to('cpu')
             p_future = p_future.to('cpu')
-            
+
             self.result_p_now = p_now.tolist()[0][-1]
             self.result_p_future = p_future.tolist()[0][-1]
             self.result_last_time = time.time()
-            
+
             time_process = time.time() - time_start
-            
+
             # Calculate the average encoding time
             self.list_process_time_context.append(time_process)
-            
+
             if len(self.list_process_time_context) > self.CALC_PROCESS_TIME_INTERVAL:
                 ave_proc_time = np.average(self.list_process_time_context)
                 num_process_frame = len(self.list_process_time_context) / (time.time() - self.last_interval_time)
                 self.last_interval_time = time.time()
-                
+
                 print('[VAP] Average processing time: %.5f [sec], #process/sec: %.3f' % (ave_proc_time, num_process_frame))
                 self.list_process_time_context = []
-            
+
             self.process_time_abs = time.time()
-                    
+
+class AudioEncoder(nn.Module):
+    BINS_P_NOW = [0, 1]
+    BINS_PFUTURE = [2, 3]
+
+    CALC_PROCESS_TIME_INTERVAL = 100
+
+    def __init__(
+        self,
+        vap_model,
+        cpc_model,
+        device,
+        frame_rate,
+        context_len_sec,
+    ):
+        super(AudioEncoder, self).__init__()
+        self.device = device
+        self.e1_context = []
+        self.e2_context = []
+
+        conf = VapConfig()
+        self.vap = VapGPT(conf)
+
+        self.device = device
+
+        sd = torch.load(vap_model, map_location=torch.device('cpu'))
+        self.vap.load_encoder(cpc_model=cpc_model)
+        self.vap.load_state_dict(sd, strict=False)
+
+        # The downsampling parameters are not loaded by "load_state_dict"
+        self.vap.encoder1.downsample[1].weight = nn.Parameter(sd['encoder.downsample.1.weight'])
+        self.vap.encoder1.downsample[1].bias = nn.Parameter(sd['encoder.downsample.1.bias'])
+        self.vap.encoder1.downsample[2].ln.weight = nn.Parameter(sd['encoder.downsample.2.ln.weight'])
+        self.vap.encoder1.downsample[2].ln.bias = nn.Parameter(sd['encoder.downsample.2.ln.bias'])
+
+        self.vap.encoder2.downsample[1].weight = nn.Parameter(sd['encoder.downsample.1.weight'])
+        self.vap.encoder2.downsample[1].bias = nn.Parameter(sd['encoder.downsample.1.bias'])
+        self.vap.encoder2.downsample[2].ln.weight = nn.Parameter(sd['encoder.downsample.2.ln.weight'])
+        self.vap.encoder2.downsample[2].ln.bias = nn.Parameter(sd['encoder.downsample.2.ln.bias'])
+
+        self.vap.to(self.device)
+        self.vap = self.vap.eval()
+
+        self.audio_contenxt_lim_sec = context_len_sec
+        self.frame_rate = frame_rate
+
+        # Context length of the audio embeddings (depends on frame rate)
+        self.audio_context_len = int(self.audio_contenxt_lim_sec * self.frame_rate)
+
+        self.sampling_rate = 16000
+        self.frame_contxt_padding = 320 # Independe from frame size
+
+        # Frame size
+        # 10Hz -> 320 + 1600 samples
+        # 20Hz -> 320 + 800 samples
+        # 50Hz -> 320 + 320 samples
+        self.audio_frame_size = self.sampling_rate // self.frame_rate + self.frame_contxt_padding
+
+        self.current_x1_audio = []
+        self.current_x2_audio = []
+
+        self.result_p_now = 0.
+        self.result_p_future = 0.
+        self.result_last_time = -1
+
+        self.process_time_abs = -1
+
+        self.e1_context = []
+        self.e2_context = []
+
+        self.list_process_time_context = []
+        self.last_interval_time = time.time()
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor):
+        time_start = time.time()
+
+        # x1_.shape
+        #   torch.Size([1, 1, 1120])
+        # x2_.shape
+        #   torch.Size([1, 1, 1120])
+        e1, e2 = self.vap.encode_audio(x1, x2)
+
+        self.e1_context.append(e1)
+        self.e2_context.append(e2)
+
+        if len(self.e1_context) > self.audio_context_len:
+            self.e1_context = self.e1_context[-self.audio_context_len:]
+        if len(self.e2_context) > self.audio_context_len:
+            self.e2_context = self.e2_context[-self.audio_context_len:]
+
+        x1_ = torch.cat(self.e1_context, dim=1).to(self.device)
+        x2_ = torch.cat(self.e2_context, dim=1).to(self.device)
+
+        o1 = self.vap.ar_channel(x1_, attention=False)
+        o2 = self.vap.ar_channel(x2_, attention=False)
+        out = self.vap.ar(o1["x"], o2["x"], attention=False)
+
+        # Outputs
+        logits: torch.Tensor = self.vap.vap_head(out["x"])
+        probs = logits.softmax(dim=-1)
+
+        p_now = self.vap.objective.probs_next_speaker_aggregate(
+            probs,
+            from_bin=self.BINS_P_NOW[0],
+            to_bin=self.BINS_P_NOW[-1]
+        )
+
+        p_future = self.vap.objective.probs_next_speaker_aggregate(
+            probs,
+            from_bin=self.BINS_PFUTURE[0],
+            to_bin=self.BINS_PFUTURE[1]
+        )
+
+        return p_now, p_future
 
 def proc_serv_out(list_socket_out, port_number=50008):
-    
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        
+
         s.bind(('127.0.0.1', port_number))
         s.listen(1)
 
@@ -334,33 +451,33 @@ def proc_serv_out(list_socket_out, port_number=50008):
             conn.setblocking(False)
             conn.settimeout(0)
             list_socket_out.append(conn)
-            
+
             print('[OUT] Current client num = %d' % len(list_socket_out))
 
 def proc_serv_in(port_number, vap):
-    
+
     FRAME_SIZE_INPUT = 160
-        
+
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind(('127.0.0.1', port_number))
             s.listen(1)
-        
+
             print('[IN] Waiting for connection of audio input...')
             conn, addr = s.accept()
             print('[IN] Connected by', addr)
-            
+
             current_x1 = np.zeros(vap.frame_contxt_padding)
             current_x2 = np.zeros(vap.frame_contxt_padding)
-            
+
             while True:
-                
+
                 # Float (4 byte) x 2 persons x 160 samples (0.01 sec)
                 size_recv = 8 * 2 * FRAME_SIZE_INPUT
                 data = conn.recv(size_recv)
 
-                # Continue to receive data until the size of the data is 
+                # Continue to receive data until the size of the data is
                 # equal to the size of the data to be received
                 if len(data) < size_recv:
                     while True:
@@ -370,59 +487,59 @@ def proc_serv_in(port_number, vap):
                         data += data_
                         if len(data) == size_recv:
                             break
-                
+
                 if len(data) == 0:
                     break
-                
+
                 x1, x2 = util.conv_bytearray_2_2floatarray(data)
-                
+
                 current_x1 = np.concatenate([current_x1, x1])
                 current_x2 = np.concatenate([current_x2, x2])
-                
+
                 # Continue to receive data until the size of the data is
                 # less that the size of the VAP frame
                 if len(current_x1) < vap.audio_frame_size:
                     continue
-                
+
                 vap.process_vap(current_x1, current_x2)
-                
+
                 # Save the last 320 samples
                 current_x1 = current_x1[-vap.frame_contxt_padding:]
                 current_x2 = current_x2[-vap.frame_contxt_padding:]
-                
+
         except Exception as e:
             print('[IN] Disconnected by', addr)
             print(e)
             continue
 
 def proc_serv_out_dist(list_socket_out, vap):
-    
+
     previous_time = vap.process_time_abs
-    
+
     while True:
-        
+
         if previous_time == vap.process_time_abs:
             time.sleep(1E-5)
             continue
-        
+
         previous_time = vap.process_time_abs
-        
+
         t = copy.copy(vap.result_last_time)
         x1 = copy.copy(vap.current_x1_audio)
         x2 = copy.copy(vap.current_x2_audio)
         p_now = copy.copy(vap.result_p_now)
         p_future = copy.copy(vap.result_p_future)
-        
+
         vap_result = {
             "t": t,
             "x1": x1, "x2": x2,
             "p_now": p_now, "p_future": p_future
         }
-        
+
         data_sent = util.conv_vapresult_2_bytearray(vap_result)
         sent_size = len(data_sent)
         data_sent_all = sent_size.to_bytes(4, 'little') + data_sent
-        
+
         for conn in list_socket_out:
             try:
                 if conn.fileno() != -1:
@@ -436,10 +553,10 @@ def proc_serv_out_dist(list_socket_out, vap):
 
 
 if __name__ == "__main__":
-    
+
     #checkpoint_dict = './model/kankou_cpc_conlim_50/VapGPT_50Hz_ad20s_134_cpc-epoch6-val_2.02414.ckpt'
     #model.load_from_checkpoint(checkpoint)
-    
+
     # Argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--vap_model", type=str, default='../../asset/vap/vap_state_dict_jp_20hz_2500msec.pt')
@@ -460,7 +577,7 @@ if __name__ == "__main__":
     # result_p_future = []
     # result_vad = []
     # result_time_stamp = [0]
-    
+
     #
     # GPU Usage
     #
@@ -469,11 +586,11 @@ if __name__ == "__main__":
         if torch.cuda.is_available():
             device = torch.device('cuda')
     print('Device: ', device)
-    
+
     wait_input = True
 
     vap = VAPRealTime(args.vap_model, args.cpc_model, device, args.vap_process_rate, args.context_len_sec)
-    
+
     list_socket_out = []
 
     # Start the server to receive the connection for sending the VAP results
@@ -488,11 +605,11 @@ if __name__ == "__main__":
 
     # This process must be run in the main thread
     proc_serv_in(args.port_num_in, vap)
-    
+
     # Continue unitl pressind "Ctrl+c"
     print('Press Ctrl+c to stop')
     while True:
         time.sleep(1E-5)
         pass
-    
-   
+
+
