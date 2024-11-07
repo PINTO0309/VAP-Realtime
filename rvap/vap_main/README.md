@@ -36,10 +36,11 @@ ydf \
 tensorflow_hub
 
 onnx2tf \
--i vap_realtime_jp_20hz_2500msec_1x1x1120.onnx \
+-i vap_state_dict_jp_20hz_2500msec_1x1x1120.onnx \
 -kat input_1 input_2 \
 -cotof \
--coion
+-coion \
+-rtpo Erf
 ```
 ![image](https://github.com/user-attachments/assets/b634971b-5bf0-4b1f-8a65-c4194148fdc1)
 

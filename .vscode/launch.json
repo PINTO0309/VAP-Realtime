@@ -12,6 +12,19 @@
                 "--vap_model", "../../asset/vap/vap_state_dict_jp_20hz_2500msec.pt",
                 // "--gpu",
             ]
+        },
+        {
+            "name": "offline_onnx_debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "${fileDirname}",
+            "console": "integratedTerminal",
+            "args": [
+                // "--vap_onnx_model", "vap_state_dict_jp_20hz_2500msec_1x1x1120.onnx",
+                "--vap_onnx_model", "vap_state_dict_jp_20hz_2500msec_1x1x1120_float32.tflite",
+                // "--gpu",
+            ]
         }
     ]
 }
